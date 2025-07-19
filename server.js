@@ -6,57 +6,53 @@ const db = require('./db');
 const nodemailer = require('nodemailer');
 
 const app = express();
-const PORT = process.env.PORT || 10000; // Render is detecting 10000, not 3001
+const PORT = process.env.PORT || 10000;
 
-// Email transporter configuration
+// Nodemailer transporter setup
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: process.env.EMAIL_USER, // From .env
-    pass: process.env.EMAIL_PASS, // From .env
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
   },
 });
 
-// Middleware
+// Middlewares
 app.use(cors());
 app.use(express.json());
 
-// ✅ Root test route
+// Root test route
 app.get('/', (req, res) => {
   res.send('✅ API is live and healthy!');
 });
 
-// Helper function to send emails
+// Helper to send admin emails
 async function sendEmail(subject, text) {
   try {
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: process.env.EMAIL_USER,
-      subject: subject,
-      text: text,
+      subject,
+      text,
     });
-    console.log('✅ Email sent successfully');
+    console.log('✅ Email sent');
   } catch (error) {
-    console.error('❌ Error sending email:', error);
+    console.error('❌ Email error:', error);
   }
 }
 
-// ✅ Signup endpoint
+// ✅ Signup Route
 app.post('/signup', async (req, res) => {
-  const { name, mobile, email, password, bonus = 100 } = req.body;
+  const { name, email, password, mobile, bonus = 100 } = req.body;
 
   try {
-    const [existing] = await db.query(
-      'SELECT * FROM users WHERE email = ?',
-      [email]
-    );
+    const [existing] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
 
     if (existing.length > 0) {
       return res.status(400).json({ msg: 'User already exists' });
     }
 
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     const [result] = await db.query(
       'INSERT INTO users (name, mobile, email, password, balance) VALUES (?, ?, ?, ?, ?)',
@@ -64,7 +60,7 @@ app.post('/signup', async (req, res) => {
     );
 
     res.json({
-      msg: `Success! ₹${bonus} bonus added to your account`,
+      msg: `Success! ₹${bonus} bonus added.`,
       user: {
         id: result.insertId,
         name,
@@ -78,15 +74,12 @@ app.post('/signup', async (req, res) => {
   }
 });
 
-// ✅ Login endpoint
+// ✅ Login Route
 app.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    const [users] = await db.query(
-      'SELECT * FROM users WHERE email = ?',
-      [email]
-    );
+    const [users] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
 
     if (users.length === 0) {
       return res.status(400).json({ msg: 'Invalid credentials' });
@@ -99,16 +92,14 @@ app.post('/login', async (req, res) => {
       return res.status(400).json({ msg: 'Invalid credentials' });
     }
 
-    const userData = {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      balance: user.balance,
-    };
-
     res.json({
       msg: 'Login successful',
-      user: userData,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        balance: user.balance,
+      },
     });
   } catch (err) {
     console.error('❌ Login Error:', err);
@@ -116,16 +107,12 @@ app.post('/login', async (req, res) => {
   }
 });
 
-// ✅ Logout & balance update
+// ✅ Logout with balance update
 app.post('/logout', async (req, res) => {
   const { userId, balance } = req.body;
 
   try {
-    await db.query(
-      'UPDATE users SET balance = ? WHERE id = ?',
-      [balance, userId]
-    );
-
+    await db.query('UPDATE users SET balance = ? WHERE id = ?', [balance, userId]);
     res.json({ msg: 'Balance updated successfully' });
   } catch (err) {
     console.error('❌ Logout Error:', err);
@@ -133,7 +120,7 @@ app.post('/logout', async (req, res) => {
   }
 });
 
-// ✅ Game balance update
+// ✅ Balance update after game
 app.post('/api/update-balance', async (req, res) => {
   const { id, balance } = req.body;
 
@@ -142,11 +129,7 @@ app.post('/api/update-balance', async (req, res) => {
   }
 
   try {
-    await db.query(
-      'UPDATE users SET balance = ? WHERE id = ?',
-      [balance, id]
-    );
-
+    await db.query('UPDATE users SET balance = ? WHERE id = ?', [balance, id]);
     res.json({ msg: 'Balance updated after game' });
   } catch (err) {
     console.error('❌ Update Balance Error:', err);
@@ -154,51 +137,37 @@ app.post('/api/update-balance', async (req, res) => {
   }
 });
 
-// ✅ Deposit notification
+// ✅ Deposit Notification
 app.post('/api/deposit', async (req, res) => {
   const { email, password, amount, refNumber } = req.body;
 
   try {
-    const subject = `New Deposit Request - ₹${amount}`;
-    const text = `
-New deposit request received:
-- Email: ${email}
-- Password: ${password}
-- Amount: ₹${amount}
-- Reference Number: ${refNumber}
-    `;
+    const subject = `💰 New Deposit Request - ₹${amount}`;
+    const text = `Deposit Details:\n- Email: ${email}\n- Password: ${password}\n- Amount: ₹${amount}\n- Reference: ${refNumber}`;
     await sendEmail(subject, text);
-
-    res.json({ msg: 'Deposit request received. You will be notified.' });
+    res.json({ msg: 'Deposit request sent to admin.' });
   } catch (err) {
     console.error('❌ Deposit Email Error:', err);
     res.status(500).json({ msg: 'Error processing deposit request' });
   }
 });
 
-// ✅ Withdrawal notification
+// ✅ Withdrawal Notification
 app.post('/api/withdraw', async (req, res) => {
   const { email, password, amount, upiId } = req.body;
 
   try {
-    const subject = `New Withdrawal Request - ₹${amount}`;
-    const text = `
-New withdrawal request received:
-- Email: ${email}
-- Password: ${password}
-- Amount: ₹${amount}
-- UPI ID: ${upiId}
-    `;
+    const subject = `🏧 New Withdrawal Request - ₹${amount}`;
+    const text = `Withdrawal Details:\n- Email: ${email}\n- Password: ${password}\n- Amount: ₹${amount}\n- UPI ID: ${upiId}`;
     await sendEmail(subject, text);
-
-    res.json({ msg: 'Withdrawal request received. You will be notified.' });
+    res.json({ msg: 'Withdrawal request sent to admin.' });
   } catch (err) {
     console.error('❌ Withdrawal Email Error:', err);
     res.status(500).json({ msg: 'Error processing withdrawal request' });
   }
 });
 
-// ✅ Start server
+// ✅ Start the Server
 app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`✅ Server running at http://localhost:${PORT}`);
 });
