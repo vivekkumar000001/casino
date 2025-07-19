@@ -8,23 +8,18 @@ const nodemailer = require('nodemailer');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// ✅ CORS Setup: Allow frontend hosted on Render
-app.use(cors({
-  origin: 'https://fastcasino.onrender.com', // frontend URL
-  credentials: true
-}));
-
-// Middleware
-app.use(express.json());
-
 // Email transporter configuration
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: process.env.EMAIL_USER, // Your Gmail from .env
-    pass: process.env.EMAIL_PASS, // Gmail password or app password
+    user: process.env.EMAIL_USER, // Your Gmail address from .env
+    pass: process.env.EMAIL_PASS, // Your Gmail password or app password from .env
   },
 });
+
+// Middleware
+app.use(cors());
+app.use(express.json());
 
 // Helper function to send emails
 async function sendEmail(subject, text) {
@@ -32,8 +27,8 @@ async function sendEmail(subject, text) {
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: process.env.EMAIL_USER, // Sending to yourself
-      subject,
-      text,
+      subject: subject,
+      text: text,
     });
     console.log('Email sent successfully');
   } catch (error) {
@@ -41,16 +36,12 @@ async function sendEmail(subject, text) {
   }
 }
 
-// ✅ Root test route
-app.get('/', (req, res) => {
-  res.send('Casino backend is live and working!');
-});
-
 // Signup endpoint
 app.post('/signup', async (req, res) => {
   const { name, mobile, email, password, bonus = 100 } = req.body;
 
   try {
+    // Check if user exists
     const [existing] = await db.query(
       'SELECT * FROM users WHERE email = ?',
       [email]
@@ -60,9 +51,11 @@ app.post('/signup', async (req, res) => {
       return res.status(400).json({ msg: 'User already exists' });
     }
 
+    // Hash password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
+    // Create user with bonus
     const [result] = await db.query(
       'INSERT INTO users (name, mobile, email, password, balance) VALUES (?, ?, ?, ?, ?)',
       [name, mobile, email, hashedPassword, bonus]
@@ -88,6 +81,7 @@ app.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
   try {
+    // Find user
     const [users] = await db.query(
       'SELECT * FROM users WHERE email = ?',
       [email]
@@ -98,12 +92,14 @@ app.post('/login', async (req, res) => {
     }
 
     const user = users[0];
-    const isMatch = await bcrypt.compare(password, user.password);
 
+    // Check password
+    const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(400).json({ msg: 'Invalid credentials' });
     }
 
+    // Return user without password
     const userData = {
       id: user.id,
       name: user.name,
@@ -121,7 +117,7 @@ app.post('/login', async (req, res) => {
   }
 });
 
-// Logout endpoint (update balance)
+// Logout endpoint (balance update)
 app.post('/logout', async (req, res) => {
   const { userId, balance } = req.body;
 
@@ -138,7 +134,7 @@ app.post('/logout', async (req, res) => {
   }
 });
 
-// Update balance from game
+// 🎯 New: Update balance from game (Dragon vs Tiger)
 app.post('/api/update-balance', async (req, res) => {
   const { id, balance } = req.body;
 
@@ -159,11 +155,12 @@ app.post('/api/update-balance', async (req, res) => {
   }
 });
 
-// Deposit notification
+// New endpoint for deposit notification
 app.post('/api/deposit', async (req, res) => {
   const { email, password, amount, refNumber } = req.body;
 
   try {
+    // Send email notification
     const subject = `New Deposit Request - ₹${amount}`;
     const text = `
       New deposit request received:
@@ -174,6 +171,7 @@ app.post('/api/deposit', async (req, res) => {
     `;
 
     await sendEmail(subject, text);
+
     res.json({ msg: 'Deposit request received. You will be notified.' });
   } catch (err) {
     console.error(err);
@@ -181,11 +179,12 @@ app.post('/api/deposit', async (req, res) => {
   }
 });
 
-// Withdrawal notification
+// New endpoint for withdrawal notification
 app.post('/api/withdraw', async (req, res) => {
   const { email, password, amount, upiId } = req.body;
 
   try {
+    // Send email notification
     const subject = `New Withdrawal Request - ₹${amount}`;
     const text = `
       New withdrawal request received:
@@ -196,6 +195,7 @@ app.post('/api/withdraw', async (req, res) => {
     `;
 
     await sendEmail(subject, text);
+
     res.json({ msg: 'Withdrawal request received. You will be notified.' });
   } catch (err) {
     console.error(err);
