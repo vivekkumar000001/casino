@@ -3,9 +3,9 @@ require('dotenv').config();
 
 const db = mysql.createPool({
   host: process.env.DB_HOST || 'sql12.freesqldatabase.com',
-  user: process.env.DB_USER || 'sql12790642',
-  password: process.env.DB_PASSWORD || 'LRDB9mZHlS',
-  database: process.env.DB_NAME || 'sql12790642',
+  user: process.env.DB_USER || 'sql12791866',
+  password: process.env.DB_PASSWORD || 'vaEFIFXIM2',
+  database: process.env.DB_NAME || 'sql12791866',
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
